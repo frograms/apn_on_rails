@@ -1,3 +1,4 @@
+# -*- encoding : utf-8 -*-
 # Represents the message you wish to send. 
 # An APN::Notification belongs to an APN::Device.
 # 
@@ -80,9 +81,34 @@ class APN::Notification < APN::Base
   # Creates the binary message needed to send to Apple.
   def message_for_sending
     json = self.to_apple_json
-    #message = "\0\0 #{self.device.to_hexa}\0#{json.length.chr}#{json}"
     device_token = [self.device.token.gsub(/[<\s>]/, '')].pack('H*')
     message = [0, 0, 32, device_token, 0, json.bytes.count, json].pack('ccca*cca*')
+
+    # message가 255byte 이상일 때 alert의 길이를 잘라서 message에 다시 가공
+    if message.size.to_i > 256 and self.alert
+      json_obj = JSON.parse(json)
+      
+      # alert이 없는 상태의 길이를 구함
+      json_obj['aps']['alert'] = ''
+      json_without_alert = json_obj.to_json
+      message_without_alert = [0, 0, 32, device_token, 0, json_without_alert.bytes.count, json_without_alert].pack('ccca*cca*')
+      
+      # byte 기준 최대 허용 길이를 산정하고 
+      allow_size = 255 - message_without_alert.size.to_i
+      # 허용된 byte 길이 만큼 자른다
+      new_alert = self.alert.byteslice(0..allow_size - 1)
+      # new_alert.size
+      # - 1 인덱스가 0번부터
+      # - 2 byteslice로 자르면 마지막 문자가 3byte로 구성된 경우(한글 등) 1byte라도 유실되면 문자가 깨지므로 마지막 문자는 아예 무시
+      # - 5 말줄임표
+      new_alert = "#{new_alert[0..new_alert.size - 5]}..."
+      # 변경된 alert을 적용하고 message를 새로 작성하여 대체
+      json_obj['aps']['alert'] = new_alert
+      json_modified_alert = json_obj.to_json
+      message_modified_alert = [0, 0, 32, device_token, 0, json_modified_alert.bytes.count, json_modified_alert].pack('ccca*cca*')
+
+      message = message_modified_alert
+    end
     raise APN::Errors::ExceededMessageSizeError.new(message) if message.size.to_i > 256
     message
   end
