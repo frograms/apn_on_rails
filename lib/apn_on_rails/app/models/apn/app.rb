@@ -9,7 +9,7 @@ class APN::App < APN::Base
   
 attr_accessible :apn_dev_cert, :apn_prod_cert
 
-  def self.send_notification_direct(notification)
+  def send_notification_direct(notification)
     the_cert = self.cert
 
     begin
