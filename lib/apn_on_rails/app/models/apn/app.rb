@@ -9,6 +9,20 @@ class APN::App < APN::Base
   
 attr_accessible :apn_dev_cert, :apn_prod_cert
 
+  def send_notification_direct(notification)
+    the_cert = self.cert
+
+    begin
+      APN::Connection.open_for_delivery({:cert => the_cert}) do |conn, sock|
+        conn.write(notification.message_for_sending)
+        notification.sent_at = Time.now
+        notification.save
+      end
+    rescue Exception => e
+      log_connection_exception(e)
+    end
+  end
+
   def cert
     (Rails.env == 'production' ? apn_prod_cert : apn_dev_cert)
   end
